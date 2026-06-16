@@ -21,7 +21,7 @@ mkdir -p "$rdir" 2>/dev/null || true
 mapfile -t files < <(ls -1t "$rdir"/*.md 2>/dev/null | head -15)
 [ "${#files[@]}" -gt 0 ] || exit 0
 
-out="HUDDLE BOARD — room \"$room\". Other agents working this repo have posted the plans/handoffs below. Review before you act; if your work overlaps or conflicts with an entry, say so instead of silently diverging."
+out="HUDDLE BOARD — room \"$room\". Other agents working this repo have posted the plans and shared-surface (contract) changes below. Review before you act; if your work overlaps or conflicts with an entry, say so instead of silently diverging."
 for f in "${files[@]}"; do
   agent=$(huddle_field "$f" agent)
   kind=$(huddle_field "$f" kind)

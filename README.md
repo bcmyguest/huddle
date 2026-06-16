@@ -25,10 +25,17 @@ One file store. No daemon, no server. The editor's hooks drive it:
 | session begins | injects the room's active board into context |
 | every turn | injects only sibling entries new since your last turn |
 | a plan is approved | publishes that plan to the room |
+| a shared surface is edited | publishes a `contract` entry naming the file siblings depend on |
 
-Reads are guaranteed (injected context, the model can't skip them). The plan
-write is hook-driven. Cadence is **milestone-based**, not per-turn: the board
-only gains an entry when a plan is published, so it stays low-noise.
+Reads are guaranteed (injected context, the model can't skip them). Writes are
+hook-driven. The board gains an entry at **milestones** — a plan approved, or a
+shared-surface file edited — not every turn, so it stays low-noise.
+
+A `contract` entry catches the cross-agent breaker that worktree isolation
+*can't*: two agents in **different** files, where one changes a shared surface
+(an API schema, a DB migration, a shared type, `.env.example`, a dependency
+manifest) that the other silently depends on. Surface edits auto-publish; one
+current entry per file (re-editing supersedes), so it stays low-noise.
 
 ### Claude Code
 
@@ -39,6 +46,7 @@ Three hooks, each enforced so the model can't skip a read or forget to post:
 | `SessionStart` | session begins | injects the room's active board into context |
 | `UserPromptSubmit` | every turn | injects only sibling entries new since your last turn |
 | `PostToolUse` (`ExitPlanMode`) | you approve a plan | publishes that plan to the room |
+| `PostToolUse` (`Edit`\|`Write`\|`MultiEdit`) | you edit a shared-surface file | publishes a `contract` entry for that file |
 
 ### opencode
 
@@ -54,6 +62,9 @@ rooms are identical and the two editors interoperate.
   plan is posted to the room. opencode has no `ExitPlanMode` event, so this is
   the closest faithful trigger. Build-mode-only sessions still read the board
   but do not post, so run the planning turn in plan mode to publish.
+- **`contract` entries** are *read* by opencode today (same shared store), so an
+  opencode agent sees the surfaces a Claude Code sibling changed. Auto-publishing
+  them from opencode edits is not wired yet — that side is Claude Code only for now.
 
 ## Rooms
 
@@ -76,11 +87,13 @@ Set `HUDDLE_AGENT` in each terminal so the board reads `frontend/plan`,
 
 ```
 ~/.claude/huddle/<repo>/
-  <epoch>-<agent>-plan.md     # one file per entry, append-only
-  .seen-<session_id>          # per-session marker for incremental reads
+  <epoch>-<agent>-plan.md         # plan entry (one per approval), append-only
+  <stamp>-<agent>-contract.md     # shared-surface change; one current per (agent, path)
+  .seen-<session_id>              # per-session marker for incremental reads
 ```
 
-Override the root with `HUDDLE_HOME`. Entries are plain markdown with frontmatter:
+Override the root with `HUDDLE_HOME`. Entries are plain markdown with frontmatter.
+A `plan` (what an agent intends):
 
 ```markdown
 ---
@@ -91,6 +104,23 @@ status: active
 ts: 2026-06-15T14:03:00Z
 ---
 Adding `role` field to /users response. Frontend: expect it nullable until migration N.
+```
+
+A `contract` (a shared surface that moved — `surface` is one of
+`api`/`schema`/`types`/`config`/`deps`, `path` is repo-relative). Re-editing the
+same path supersedes the prior entry, so the board holds one current line per file:
+
+```markdown
+---
+agent: backend
+room: acme
+kind: contract
+surface: api
+path: openapi.yaml
+status: active
+ts: 2026-06-15T14:03:00Z
+---
+changed openapi.yaml (api surface) — re-check your assumptions about it.
 ```
 
 ## Install
@@ -130,8 +160,9 @@ export HUDDLE_AGENT=frontend   # or backend, infra, ...
 ## Limits (by design)
 
 - Not real-time. A sibling's plan reaches you at your **next prompt**, not mid-turn.
-- Sync points are plan-approve only. A long-running agent that never re-plans goes
-  quiet until it does. (Hooking into `handoff` is a planned second sync point.)
+- Sync points are plan-approve and shared-surface edits. A long-running agent that
+  never re-plans and never touches a contract surface goes quiet until it does.
+  (Hooking into `handoff` is a planned further sync point.)
 - On opencode, only plan-agent turns post; build-mode-only sessions read but don't
   write, since opencode exposes no plan-approval hook.
 - No locking. Entries are append-only files; concurrent writes don't collide

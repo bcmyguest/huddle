@@ -39,6 +39,16 @@
             "statusMessage": "Publishing plan to huddle..."
           }
         ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/huddle-write-activity.sh\"",
+            "timeout": 10
+          }
+        ]
       }
     ]
   }
