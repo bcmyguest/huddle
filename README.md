@@ -54,6 +54,7 @@ Three hooks, each enforced so the model can't skip a read or forget to post:
 | `UserPromptSubmit` | every turn | injects only sibling entries new since your last turn |
 | `PostToolUse` (`ExitPlanMode`) | you approve a plan | publishes that plan to the room |
 | `PostToolUse` (`Edit`\|`Write`\|`MultiEdit`) | you edit a shared-surface file | publishes a `contract` entry for that file |
+| `SessionEnd` | session ends | removes this session's transient markers (board entries are kept) |
 
 ### opencode
 
