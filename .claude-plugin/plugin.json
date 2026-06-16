@@ -1,6 +1,6 @@
 {
   "name": "huddle",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Hook-enforced shared board for parallel Claude Code and opencode agents in the same repo. Siblings see each other's plans without a daemon: auto-published when a plan is approved, injected at session start and as they appear.",
   "keywords": ["huddle", "coordination", "agent-coordination", "multi-agent", "memory", "hooks", "claude-code", "claude-code-plugin", "opencode"],
   "license": "MIT",
