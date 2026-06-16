@@ -73,8 +73,8 @@ rooms are identical and the two editors interoperate.
 - **`contract` entries** publish from opencode edits too: `tool.execute.after`
   on the `edit`/`write` tools is the twin of Claude's `PostToolUse(Edit|Write)`,
   so an opencode edit to a shared surface posts (and supersedes) a contract the
-  same way. opencode's multi-file `patch` tool is not yet mirrored, so edits made
-  through it publish no contract.
+  same way. The multi-file `patch` tool is covered as well — one contract per
+  file it touches, read from the paths opencode reports in the tool result.
 - **Marker cleanup** maps to `session.deleted` — opencode's nearest thing to a
   session end — which clears that session's `seen` markers and sweeps orphans,
   the way Claude's `SessionEnd` hook does.

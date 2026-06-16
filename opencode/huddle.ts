@@ -13,16 +13,15 @@ import { join } from "node:path"
 // Mapping (opencode hook -> the Claude Code hook it stands in for):
 //   chat.message + experimental.chat.system.transform  ->  SessionStart + UserPromptSubmit
 //   event:session.idle (plan agent)                     ->  PostToolUse(ExitPlanMode)
-//   tool.execute.after (edit|write)                     ->  PostToolUse(Edit|Write|MultiEdit)
+//   tool.execute.after (edit|write|patch)               ->  PostToolUse(Edit|Write|MultiEdit)
 //   event:session.deleted                               ->  SessionEnd
 //
 // opencode has no ExitPlanMode tool; its plan agent is the structural twin of
 // Claude's plan mode, so a finished plan-agent turn stands in for "a plan was
 // approved". Build-mode-only sessions read the board but do not post. opencode's
 // edit/write tools are the twins of Claude's Edit/Write; its multi-file `patch`
-// tool is not mirrored (different arg shape), so edits made through it publish no
-// contract. A session being deleted is the nearest thing opencode has to a session
-// end, so it stands in for marker cleanup.
+// tool publishes one contract per file it touches. A session being deleted is the
+// nearest thing opencode has to a session end, so it stands in for marker cleanup.
 //
 // FAIL OPEN: if the hook scripts can't be found, or any call errors, the plugin
 // does nothing — it never blocks a prompt and never drops a turn.
@@ -103,19 +102,35 @@ export const HuddleOpencodePlugin: Plugin = async ({ $, directory }) => {
     },
 
     // PUBLISH (contract): opencode's edit/write tools are the twins of Claude's
-    // Edit/Write. After one runs, hand the path to the activity hook — it records
+    // Edit/Write, and its multi-file `patch` tool has no Claude analogue. After
+    // any of them runs, hand each touched path to the activity hook — it records
     // a touch and, when the path is a shared surface, publishes (and supersedes)
     // a contract entry. Same per-edit cadence as the Claude PostToolUse hook.
-    "tool.execute.after": async (input) => {
-      const tool_name = input.tool === "edit" ? "Edit" : input.tool === "write" ? "Write" : ""
-      if (!tool_name) return
-      const fp = (input.args as Json | undefined)?.filePath
-      if (typeof fp !== "string" || !fp) return
-      await run("huddle-write-activity.sh", {
-        cwd: cwd.get(input.sessionID) ?? directory,
-        tool_name,
-        tool_input: { file_path: fp },
-      })
+    "tool.execute.after": async (input, output) => {
+      const publish = (fp: unknown, tool_name: string) =>
+        typeof fp === "string" && fp
+          ? run("huddle-write-activity.sh", {
+              cwd: cwd.get(input.sessionID) ?? directory,
+              tool_name,
+              tool_input: { file_path: fp },
+            })
+          : Promise.resolve("")
+
+      if (input.tool === "edit" || input.tool === "write") {
+        const fp = (input.args as Json | undefined)?.filePath
+        await publish(fp, input.tool === "edit" ? "Edit" : "Write")
+        return
+      }
+
+      // `patch` applies a V4A diff across several files at once; opencode reports
+      // each affected file (absolute path) in output.metadata.files, so publish a
+      // contract per file — an add/update/delete of a shared surface is caught the
+      // same as a direct edit. Falls silent if the shape is ever absent.
+      if (input.tool === "patch") {
+        const files = (output?.metadata as { files?: Array<{ filePath?: unknown }> } | undefined)?.files
+        if (!Array.isArray(files)) return
+        for (const f of files) await publish(f?.filePath, "Edit")
+      }
     },
 
     // PUBLISH: track the assistant agent + text from the event stream, and when
