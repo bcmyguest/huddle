@@ -13,10 +13,16 @@ import { join } from "node:path"
 // Mapping (opencode hook -> the Claude Code hook it stands in for):
 //   chat.message + experimental.chat.system.transform  ->  SessionStart + UserPromptSubmit
 //   event:session.idle (plan agent)                     ->  PostToolUse(ExitPlanMode)
+//   tool.execute.after (edit|write)                     ->  PostToolUse(Edit|Write|MultiEdit)
+//   event:session.deleted                               ->  SessionEnd
 //
 // opencode has no ExitPlanMode tool; its plan agent is the structural twin of
 // Claude's plan mode, so a finished plan-agent turn stands in for "a plan was
-// approved". Build-mode-only sessions read the board but do not post.
+// approved". Build-mode-only sessions read the board but do not post. opencode's
+// edit/write tools are the twins of Claude's Edit/Write; its multi-file `patch`
+// tool is not mirrored (different arg shape), so edits made through it publish no
+// contract. A session being deleted is the nearest thing opencode has to a session
+// end, so it stands in for marker cleanup.
 //
 // FAIL OPEN: if the hook scripts can't be found, or any call errors, the plugin
 // does nothing — it never blocks a prompt and never drops a turn.
@@ -96,6 +102,22 @@ export const HuddleOpencodePlugin: Plugin = async ({ $, directory }) => {
       output.system.push(out)
     },
 
+    // PUBLISH (contract): opencode's edit/write tools are the twins of Claude's
+    // Edit/Write. After one runs, hand the path to the activity hook — it records
+    // a touch and, when the path is a shared surface, publishes (and supersedes)
+    // a contract entry. Same per-edit cadence as the Claude PostToolUse hook.
+    "tool.execute.after": async (input) => {
+      const tool_name = input.tool === "edit" ? "Edit" : input.tool === "write" ? "Write" : ""
+      if (!tool_name) return
+      const fp = (input.args as Json | undefined)?.filePath
+      if (typeof fp !== "string" || !fp) return
+      await run("huddle-write-activity.sh", {
+        cwd: cwd.get(input.sessionID) ?? directory,
+        tool_name,
+        tool_input: { file_path: fp },
+      })
+    },
+
     // PUBLISH: track the assistant agent + text from the event stream, and when
     // a plan-agent turn goes idle, publish its plan to the room.
     event: async ({ event }) => {
@@ -148,6 +170,26 @@ export const HuddleOpencodePlugin: Plugin = async ({ $, directory }) => {
       if (e.type === "session.compacted") {
         const sid: string | undefined = e.properties?.sessionID
         if (sid) started.delete(sid)
+        return
+      }
+
+      // CLEANUP: a deleted session is opencode's nearest thing to a session end.
+      // Drop its transient markers (and sweep orphans) the way Claude's SessionEnd
+      // hook does, and release the per-session bookkeeping held here.
+      if (e.type === "session.deleted") {
+        const info = e.properties?.info
+        const sid: string | undefined = info?.id
+        if (!sid) return
+        const dir = info?.directory ?? cwd.get(sid) ?? directory
+        started.delete(sid)
+        pending.delete(sid)
+        mode.delete(sid)
+        const msg = curMsg.get(sid)
+        if (msg) partText.delete(msg)
+        curMsg.delete(sid)
+        lastPub.delete(sid)
+        cwd.delete(sid)
+        await run("huddle-end.sh", { cwd: dir, session_id: sid })
       }
     },
   }

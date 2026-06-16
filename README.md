@@ -59,20 +59,25 @@ Three hooks, each enforced so the model can't skip a read or forget to post:
 ### opencode
 
 The same store, reached through opencode's plugin API. `opencode/huddle.ts` is a
-thin bridge that shells out to the same three scripts, so the on-disk format and
+thin bridge that shells out to the same hook scripts, so the on-disk format and
 rooms are identical and the two editors interoperate.
 
 - **Reads** map to `chat.message` + `experimental.chat.system.transform`: the
   full board is injected on your first prompt, then only new sibling entries on
   every prompt after. Same guarantee as Claude Code.
-- **Publish** maps to `session.idle` for opencode's **plan agent**, the
+- **Plans** map to `session.idle` for opencode's **plan agent**, the
   structural twin of Claude's plan mode: when a plan-mode turn finishes, its
   plan is posted to the room. opencode has no `ExitPlanMode` event, so this is
   the closest faithful trigger. Build-mode-only sessions still read the board
   but do not post, so run the planning turn in plan mode to publish.
-- **`contract` entries** are *read* by opencode today (same shared store), so an
-  opencode agent sees the surfaces a Claude Code sibling changed. Auto-publishing
-  them from opencode edits is not wired yet — that side is Claude Code only for now.
+- **`contract` entries** publish from opencode edits too: `tool.execute.after`
+  on the `edit`/`write` tools is the twin of Claude's `PostToolUse(Edit|Write)`,
+  so an opencode edit to a shared surface posts (and supersedes) a contract the
+  same way. opencode's multi-file `patch` tool is not yet mirrored, so edits made
+  through it publish no contract.
+- **Marker cleanup** maps to `session.deleted` — opencode's nearest thing to a
+  session end — which clears that session's `seen` markers and sweeps orphans,
+  the way Claude's `SessionEnd` hook does.
 
 ## Rooms
 
@@ -173,8 +178,8 @@ export HUDDLE_AGENT=frontend   # or backend, infra, ...
 - Sync points are plan-approve and shared-surface edits. A long-running agent that
   never re-plans and never touches a contract surface goes quiet until it does.
   (Hooking into `handoff` is a planned further sync point.)
-- On opencode, only plan-agent turns post; build-mode-only sessions read but don't
-  write, since opencode exposes no plan-approval hook.
+- On opencode, only plan-agent turns post **plans** (no plan-approval hook exists),
+  but **contracts** publish from any edit, so build-mode sessions still post those.
 - No locking. Entries are append-only files; concurrent writes don't collide
   because each is a uniquely named file.
 - `jq` and GNU `find`/`date` required (Linux/standard dev box). The opencode
