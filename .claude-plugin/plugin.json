@@ -1,0 +1,45 @@
+{
+  "name": "huddle",
+  "version": "0.1.0",
+  "description": "Hook-enforced shared board for parallel Claude Code agents in the same repo. Siblings see each other's plans without a daemon — auto-published when a plan is approved, injected at session start and as they appear.",
+  "keywords": ["huddle", "coordination", "multi-agent", "memory", "hooks", "claude-code"],
+  "license": "MIT",
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/huddle-read.sh\"",
+            "timeout": 10,
+            "statusMessage": "Reading huddle board..."
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/huddle-read-new.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "ExitPlanMode",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/huddle-write-plan.sh\"",
+            "timeout": 10,
+            "statusMessage": "Publishing plan to huddle..."
+          }
+        ]
+      }
+    ]
+  }
+}
