@@ -61,3 +61,39 @@ huddle_surface() {
     .env.example|.env.sample) echo config; return ;;
   esac
 }
+
+# How long a touch stays "live" (seconds). A touch older than this is treated as
+# the agent having moved on, so overlap warnings decay instead of lingering.
+HUDDLE_TOUCH_TTL="${HUDDLE_TOUCH_TTL:-900}"
+
+# huddle_safe STRING -> filename-safe form (used for agent in file names).
+huddle_safe() { printf '%s' "$1" | tr -c 'A-Za-z0-9_.-' '_'; }
+
+# huddle_record_touch ROOMDIR AGENT RELPATH
+# Append RELPATH to this agent's rolling touched-set, deduped to one (latest)
+# line per path and pruned of entries older than the TTL. The set is a plain
+# `<epoch>\t<relpath>` file, dot-prefixed so the *.md board scans ignore it.
+huddle_record_touch() {
+  local rdir="$1" agent="$2" rel="$3" f now cutoff tmp
+  f="$rdir/.touched-$(huddle_safe "$agent")"
+  now=$(date -u +%s); cutoff=$((now - HUDDLE_TOUCH_TTL))
+  tmp=$(mktemp "$rdir/.touched.XXXXXX") || return 0
+  if [ -f "$f" ]; then
+    awk -F'\t' -v c="$cutoff" -v p="$rel" '$1>=c && $2!=p' "$f" > "$tmp" 2>/dev/null || true
+  fi
+  printf '%s\t%s\n' "$now" "$rel" >> "$tmp"
+  mv -f "$tmp" "$f" 2>/dev/null || rm -f "$tmp"
+}
+
+# huddle_touched_paths_file FILE -> TTL-valid relpaths in a touched-set file.
+huddle_touched_paths_file() {
+  local f="$1" cutoff
+  [ -f "$f" ] || return 0
+  cutoff=$(( $(date -u +%s) - HUDDLE_TOUCH_TTL ))
+  awk -F'\t' -v c="$cutoff" '$1>=c {print $2}' "$f" 2>/dev/null || true
+}
+
+# huddle_touched_paths ROOMDIR AGENT -> TTL-valid relpaths this agent has touched.
+huddle_touched_paths() {
+  huddle_touched_paths_file "$1/.touched-$(huddle_safe "$2")"
+}

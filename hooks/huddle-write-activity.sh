@@ -21,14 +21,19 @@ fp=$(printf '%s' "$HOOK_JSON" | jq -r '.tool_input.file_path // empty')
 [ -n "$fp" ] || exit 0
 
 rel=$(huddle_relpath "$cwd" "$fp")
-surface=$(huddle_surface "$rel")
-[ -n "$surface" ] || exit 0   # not a shared surface -> nothing to publish
-
 room=$(huddle_room "$cwd")
 me=$(huddle_agent "$cwd")
 rdir=$(huddle_room_dir "$room")
 mkdir -p "$rdir"
-safe_agent=$(printf '%s' "$me" | tr -c 'A-Za-z0-9_.-' '_')
+
+# Record the touch for *every* edit (spatial signal): read hooks intersect these
+# sets so a sibling editing the same file gets flagged. Cheap, decays by TTL.
+huddle_record_touch "$rdir" "$me" "$rel"
+
+surface=$(huddle_surface "$rel")
+[ -n "$surface" ] || exit 0   # not a shared surface -> no contract to publish
+
+safe_agent=$(huddle_safe "$me")
 
 # Supersede: drop this agent's prior contract entry for the same path.
 for old in "$rdir"/*-"${safe_agent}"-contract.md; do

@@ -26,6 +26,7 @@ One file store. No daemon, no server. The editor's hooks drive it:
 | every turn | injects only sibling entries new since your last turn |
 | a plan is approved | publishes that plan to the room |
 | a shared surface is edited | publishes a `contract` entry naming the file siblings depend on |
+| you and a sibling edit the same file | your next prompt warns you (touched-set overlap) |
 
 Reads are guaranteed (injected context, the model can't skip them). Writes are
 hook-driven. The board gains an entry at **milestones** — a plan approved, or a
@@ -36,6 +37,12 @@ A `contract` entry catches the cross-agent breaker that worktree isolation
 (an API schema, a DB migration, a shared type, `.env.example`, a dependency
 manifest) that the other silently depends on. Surface edits auto-publish; one
 current entry per file (re-editing supersedes), so it stays low-noise.
+
+Every edit (not just surfaces) also records a lightweight **touch**. Reads are
+filtered through it: a sibling's `contract` on a file you're currently editing is
+flagged ⚠, and if you and a sibling are editing the **same** file your next prompt
+warns you once. Touches decay after 15 min (`HUDDLE_TOUCH_TTL`), so the warnings
+follow what's actually in flight rather than lingering.
 
 ### Claude Code
 
@@ -89,7 +96,9 @@ Set `HUDDLE_AGENT` in each terminal so the board reads `frontend/plan`,
 ~/.claude/huddle/<repo>/
   <epoch>-<agent>-plan.md         # plan entry (one per approval), append-only
   <stamp>-<agent>-contract.md     # shared-surface change; one current per (agent, path)
+  .touched-<agent>                # rolling set of files this agent edited (TTL-pruned)
   .seen-<session_id>              # per-session marker for incremental reads
+  .seen-overlap-<session_id>      # overlaps already warned this session
 ```
 
 Override the root with `HUDDLE_HOME`. Entries are plain markdown with frontmatter.
