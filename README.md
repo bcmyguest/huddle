@@ -8,8 +8,8 @@ build, without a daemon, a server, or the agents having to remember to check in.
 It's a thin memory layer the agents *can't forget to use*: the reads and the
 plan-writes are driven by Claude Code hooks, not by the model choosing to.
 
-Pairs with [`handoff`](https://github.com/bcmyguest/personal-skills) (capture
-state) and [`pickup`](https://github.com/bcmyguest/personal-skills) (resume
+Pairs with [`handoff`](https://github.com/bcmyguest/baton) (capture
+state) and [`pickup`](https://github.com/bcmyguest/baton) (resume
 state) — where those move work *across time*, `huddle` shares it *across
 concurrent agents*.
 
