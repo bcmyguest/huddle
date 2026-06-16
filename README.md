@@ -97,11 +97,15 @@ Adding `role` field to /users response. Frontend: expect it nullable until migra
 
 ### Claude Code
 
+No clone needed — add the repo as a plugin marketplace:
+
 ```bash
-# from a Claude Code session:
-/plugin            # add this directory as a local plugin, then enable "huddle"
+claude plugin marketplace add bcmyguest/huddle
+claude plugin install huddle@huddle
 # restart Claude Code so hooks load
 ```
+
+(Cloned it already? `/plugin` from a session adds the local directory instead.)
 
 ### opencode
 
