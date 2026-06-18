@@ -6,9 +6,14 @@
 HUDDLE_HOME="${HUDDLE_HOME:-$HOME/.claude/huddle}"
 
 # huddle_room CWD -> room name (git repo basename, else cwd basename).
-# All agents whose cwd resolves to the same repo share one room.
+# All agents whose cwd resolves to the same repo share one room. Keyed on the
+# *common* git dir, not --show-toplevel: inside a linked worktree the toplevel is
+# the worktree dir (e.g. huddle-feature), which would split each worktree into its
+# own room. --git-common-dir resolves to the main repo's .git from any worktree.
 huddle_room() {
-  local cwd="$1" top
+  local cwd="$1" gd top
+  gd=$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir 2>/dev/null) || gd=""
+  if [ -n "$gd" ]; then basename "$(dirname "$gd")"; return; fi
   top=$(git -C "$cwd" rev-parse --show-toplevel 2>/dev/null) || top=""
   if [ -n "$top" ]; then basename "$top"; else basename "$cwd"; fi
 }
